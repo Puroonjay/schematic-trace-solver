@@ -10,9 +10,7 @@ export type CollisionInfo = {
 
 /**
  * Checks if a given path collides with any other traces in a list of solved trace paths.
- * It iterates through each segment of the input path and compares it against every segment
- * of all other traces (excluding a specified trace to avoid self-collision checks).
- * If an intersection is found between any segments, it indicates a collision.
+ * Updated to allow same-net traces to overlap for Bounty #34.
  */
 export const isPathColliding = (
   path: Point[],
@@ -23,13 +21,23 @@ export const isPathColliding = (
     return { isColliding: false }
   }
 
+  // Find the trace we are currently evaluating to check its net identity
+  const targetTrace = allTraces.find((t) => t.mspPairId === traceIdToExclude)
+
   for (let i = 0; i < path.length - 1; i++) {
     const pathSegP1 = path[i]
     const pathSegQ1 = path[i + 1]
 
     for (const existingTrace of allTraces) {
-      if (existingTrace.mspPairId === traceIdToExclude) {
-        continue // Skip self-collision check
+      // Logic for Bounty #34:
+      // We skip collision detection if it's the same trace OR if they belong to the same net.
+      const isSameNet =
+        targetTrace &&
+        targetTrace.globalConnNetId !== undefined &&
+        targetTrace.globalConnNetId === existingTrace.globalConnNetId
+
+      if (existingTrace.mspPairId === traceIdToExclude || isSameNet) {
+        continue // Skip same-net or self-collision check
       }
 
       for (let j = 0; j < existingTrace.tracePath.length - 1; j++) {

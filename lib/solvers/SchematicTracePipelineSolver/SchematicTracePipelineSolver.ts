@@ -61,7 +61,6 @@ export interface SchematicTracePipelineSolverParams {
 
 export class SchematicTracePipelineSolver extends BaseSolver {
   mspConnectionPairSolver?: MspConnectionPairSolver
-  // guidelinesSolver?: GuidelinesSolver
   schematicTraceLinesSolver?: SchematicTraceLinesSolver
   longDistancePairSolver?: LongDistancePairSolver
   traceOverlapShiftSolver?: TraceOverlapShiftSolver
@@ -86,18 +85,6 @@ export class SchematicTracePipelineSolver extends BaseSolver {
         onSolved: (mspSolver) => {},
       },
     ),
-    // definePipelineStep(
-    //   "guidelinesSolver",
-    //   GuidelinesSolver,
-    //   () => [
-    //     {
-    //       inputProblem: this.inputProblem,
-    //     },
-    //   ],
-    //   {
-    //     onSolved: (guidelinesSolver) => {},
-    //   },
-    // ),
     definePipelineStep(
       "schematicTraceLinesSolver",
       SchematicTraceLinesSolver,
@@ -107,7 +94,6 @@ export class SchematicTracePipelineSolver extends BaseSolver {
           dcConnMap: this.mspConnectionPairSolver!.dcConnMap,
           globalConnMap: this.mspConnectionPairSolver!.globalConnMap,
           inputProblem: this.inputProblem,
-          // guidelines: this.guidelinesSolver!.guidelines,
           chipMap: this.mspConnectionPairSolver!.chipMap,
         },
       ],
@@ -159,9 +145,7 @@ export class SchematicTracePipelineSolver extends BaseSolver {
         },
       ],
       {
-        onSolved: (_solver) => {
-          // TODO
-        },
+        onSolved: (_solver) => {},
       },
     ),
     definePipelineStep(
@@ -196,6 +180,8 @@ export class SchematicTracePipelineSolver extends BaseSolver {
       const labelMergingOutput =
         instance.traceLabelOverlapAvoidanceSolver!.labelMergingSolver!.getOutput()
 
+      const mspSolver = instance.mspConnectionPairSolver!
+
       return [
         {
           inputProblem: instance.inputProblem,
@@ -203,6 +189,11 @@ export class SchematicTracePipelineSolver extends BaseSolver {
           allLabelPlacements: labelMergingOutput.netLabelPlacements,
           mergedLabelNetIdMap: labelMergingOutput.mergedLabelNetIdMap,
           paddingBuffer: 0.1,
+          // Fixed TS2345: Added connectivity maps for same-net merging logic
+          mspConnectionPairs: mspSolver.mspConnectionPairs,
+          chipMap: mspSolver.chipMap,
+          dcConnMap: mspSolver.dcConnMap,
+          globalConnMap: mspSolver.globalConnMap,
         },
       ]
     }),
@@ -250,9 +241,7 @@ export class SchematicTracePipelineSolver extends BaseSolver {
       _chipObstacleSpatialIndex: undefined,
     })
 
-    // First, expand chips so existing pin coordinates sit on or within their edges without shrinking.
     expandChipsToFitPins(cloned)
-    // Then, for any remaining pins that are still inside due to mixed extremes, snap them to the nearest edge.
     correctPinsInsideChips(cloned)
 
     return cloned
@@ -284,8 +273,10 @@ export class SchematicTracePipelineSolver extends BaseSolver {
     }
 
     const constructorParams = pipelineStepDef.getConstructorParams(this)
-    // @ts-ignore
-    this.activeSubSolver = new pipelineStepDef.solverClass(...constructorParams)
+
+    // Fixed: Cast to any to resolve generic constructor mismatch
+    const SolverClass = pipelineStepDef.solverClass as any
+    this.activeSubSolver = new SolverClass(...(constructorParams as any[]))
     ;(this as any)[pipelineStepDef.solverName] = this.activeSubSolver
     this.timeSpentOnPhase[pipelineStepDef.solverName] = 0
     this.startTimeOfPhase[pipelineStepDef.solverName] = performance.now()
@@ -331,30 +322,19 @@ export class SchematicTracePipelineSolver extends BaseSolver {
         }) as GraphicsObject[]),
     ]
 
-    if (visualizations.length === 1) {
-      return visualizations[0]!
-    }
+    if (visualizations.length === 1) return visualizations[0]!
 
-    // Simple combination of visualizations
-    const finalGraphics = {
+    return {
       points: visualizations.flatMap((v) => v.points || []),
       rects: visualizations.flatMap((v) => v.rects || []),
       lines: visualizations.flatMap((v) => v.lines || []),
       circles: visualizations.flatMap((v) => v.circles || []),
       texts: visualizations.flatMap((v) => v.texts || []),
     }
-    return finalGraphics
   }
 
-  /**
-   * A lightweight version of the visualize method that can be used to stream
-   * progress
-   */
   override preview(): GraphicsObject {
-    if (this.activeSubSolver) {
-      return this.activeSubSolver.preview()
-    }
-
+    if (this.activeSubSolver) return this.activeSubSolver.preview()
     return super.preview()
   }
 }

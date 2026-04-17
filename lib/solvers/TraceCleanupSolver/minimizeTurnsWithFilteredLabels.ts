@@ -6,10 +6,8 @@ import type { NetLabelPlacement } from "../NetLabelPlacementSolver/NetLabelPlace
 
 /**
  * Minimizes the turns of a target trace while considering other traces and labels as obstacles.
- * This function first identifies the target trace and separates it from other traces, which are then treated as obstacles.
- * It also filters out labels that belong to the target trace's net, so they don't act as obstacles.
- * The function then combines static obstacles (from the input problem) with the other traces and filtered labels to create a comprehensive set of obstacles.
- * Finally, it uses a turn minimization algorithm to find a new path for the target trace that avoids these combined obstacles.
+ * Updated for Bounty #34: Traces on the same net are no longer treated as obstacles,
+ * allowing them to overlap and merge.
  */
 export const minimizeTurnsWithFilteredLabels = ({
   targetMspConnectionPairId,
@@ -33,8 +31,14 @@ export const minimizeTurnsWithFilteredLabels = ({
     throw new Error(`Target trace ${targetMspConnectionPairId} not found`)
   }
 
+  // FIX FOR BOUNTY #34:
+  // We must filter out traces that belong to the same net as our targetTrace.
+  // If we treat same-net traces as obstacles, they will swerve to avoid each other,
+  // creating the "double connection" or parallel line bug.
   const obstacleTraces = traces.filter(
-    (t) => t.mspPairId !== targetMspConnectionPairId,
+    (t) =>
+      t.mspPairId !== targetMspConnectionPairId &&
+      t.globalConnNetId !== targetTrace.globalConnNetId,
   )
 
   const TRACE_WIDTH = 0.01
